@@ -14,11 +14,50 @@ be able to reach above it.
 
 | Module | What it does |
 |---|---|
+| `bridge.js` | Talking to the UXP panel over postMessage: requests as promises, notifications to handlers, and the retries the real thing turned out to need |
 | `modal.js` | Opening and closing modal dialogs: backdrop clicks, Escape, and a guard for unsaved edits |
 | `paste.js` | Pasting through the panel, because a webview never gets keyboard focus on Windows |
 | `i18n.js` | A tiny i18n engine; each panel supplies its own dictionary |
 
 Plain ES modules with no build step and no dependencies.
+
+## bridge.js
+
+```js
+import { createBridge } from './common/bridge.js';
+
+const bridge = createBridge({
+	iid: IID,
+	timeoutMessage: (type) => tr('app.timeout', type),
+	handlers: {
+		tree: (msg) => applyTree(msg),
+		log: (msg) => dlog('panel', msg.msg),
+		showHelp: () => openHelp(),
+	},
+	isConnected: () => state.connected,
+	onSendError: () => { if (!state.connected) renderAll(); },
+	onGiveUp: () => { bridgeFailed = true; renderAll(); },
+});
+const { post, request } = bridge;
+
+bridge.connect();
+```
+
+`request(type, payload)` resolves with the reply that carries the same
+`reqId`, and rejects if nothing comes back — otherwise a silent panel leaves
+the promise pending and a button disabled for good. Messages without a
+`reqId` go to `handlers`, keyed by type; a message that is both a reply and
+a notification (a layer tree, say) does both.
+
+Three things here come from what the panel actually does rather than what the
+documentation says. `uxpHost.postMessage` accepts a different shape depending
+on the environment, so sends are tried three ways. Replies arrive as a
+`message` event on `window`, not on the `<webview>` element, where `data`
+comes through undefined. And the first `ready` can be sent before the bridge
+is up, so `connect()` keeps resending until the panel answers, then gives up
+and says so rather than hanging silently.
+
+`bridge.stats` carries `sendTries` and `lastSendError` for a diagnostics line.
 
 ## modal.js
 
