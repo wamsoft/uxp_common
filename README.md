@@ -18,6 +18,7 @@ be able to reach above it.
 | `modal.js` | Opening and closing modal dialogs: backdrop clicks, Escape, and a guard for unsaved edits |
 | `paste.js` | Pasting through the panel, because a webview never gets keyboard focus on Windows |
 | `i18n.js` | A tiny i18n engine; each panel supplies its own dictionary |
+| `diag.js` | The one-line diagnostics readout, written without touching the bridge so it still works when the bridge does not |
 
 Plain ES modules with no build step and no dependencies.
 
@@ -116,6 +117,32 @@ default, and an unknown key falls back to English and then to the key itself.
 
 `localStorage` is unavailable inside a UXP webview, so the language lives in
 memory; `setLang()` exists for panels that keep it in their own preferences.
+
+## diag.js
+
+A line pinned to the bottom of the panel showing what the visible context
+actually believes: instance id, a ticking clock, connection state, send
+counters, and the last error. It deliberately avoids the bridge and the
+network, so it keeps working when those are what is broken. A stopped clock
+means compositing itself has frozen.
+
+```js
+import { newIid, createDiag } from './common/diag.js';
+
+const IID = newIid();
+const diag = createDiag({
+	iid: IID,
+	stats: bridge.stats,
+	fields: () => ' conn:' + (state.connected ? 'Y' : 'n') +
+	              ' rows:' + state.rows.length,
+});
+
+diag.toggle();   // from Ctrl+D, and from the panel flyout menu
+```
+
+Reach it from the flyout as well as the keyboard: on Windows a webview does
+not reliably get keyboard focus, so a keyboard-only toggle is unavailable
+exactly when the line is wanted.
 
 ## License
 
