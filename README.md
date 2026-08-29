@@ -16,7 +16,8 @@ be able to reach above it.
 |---|---|
 | `bridge.js` | Talking to the UXP panel over postMessage: requests as promises, notifications to handlers, and the retries the real thing turned out to need |
 | `modal.js` | Opening and closing modal dialogs: backdrop clicks, Escape, and a guard for unsaved edits |
-| `paste.js` | Pasting through the panel, because a webview never gets keyboard focus on Windows |
+| `paste.js` | Pasting through the panel, because keystrokes do not reach a freshly opened panel on Windows |
+| `wake.js` | The one-time hint telling the user to click Photoshop once, for the same reason |
 | `i18n.js` | A tiny i18n engine; each panel supplies its own dictionary |
 | `diag.js` | The one-line diagnostics readout, written without touching the bridge so it still works when the bridge does not |
 
@@ -83,10 +84,11 @@ button always closes, since pressing it is deliberate.
 
 ## paste.js
 
-On Windows a UXP panel's webview does not receive keyboard focus, so `Ctrl+V`
+On Windows a freshly opened panel receives no keystrokes at all, so `Ctrl+V`
 never arrives — a known Adobe issue with no workaround. The panel side reads
-the clipboard instead and hands the text over. Clicking a field still moves
-DOM focus even when OS focus is elsewhere, so "the field you clicked last" is
+the clipboard instead and hands the text over; a button click is handled by
+UXP and needs no keyboard delivery. Clicking a field still moves DOM focus
+even when the host window is not active, so "the field you clicked last" is
 enough to know where the text should land.
 
 ```js
@@ -100,6 +102,28 @@ attachPaste('#renameDialog', {
 
 The panel must hold the `clipboard` permission and answer a `readClipboard`
 message with `{ text }`.
+
+## wake.js
+
+The same Windows problem seen from the other side. Until the host window is
+activated, a panel opened moments ago gets no keystrokes — not `Ctrl+V`, not
+ordinary typing. Clicks arrive and DOM focus lands on the field, so nothing
+looks wrong; the keys simply go nowhere. One click on Photoshop itself wakes
+it, and everything behaves normally from then on. It is not specific to the
+webview: a native field on the panel does the same. There is no API to fix
+it, so the panel says so once.
+
+```js
+import { createWakeHint } from './common/wake.js';
+
+createWakeHint();
+```
+
+The panel supplies the element (`#wakeHint` by default) and its wording, the
+way `diag.js` takes `#diagLine`. The hint clears itself the moment a key
+arrives, which makes its presence the signal: still showing means still
+asleep. Clicking it dismisses it too. Nothing is shown on macOS, where the
+problem does not exist.
 
 ## i18n.js
 
